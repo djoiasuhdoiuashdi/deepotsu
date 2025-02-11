@@ -409,7 +409,7 @@ def res_hedu_net_block(inputs, nlayers=1, short_cut=False):
     final_layer = None
     if short_cut:
         n_side = len(side_outputs)
-        weights = tf.get_variable('side_weight',[n_side],tf.float32,tf.constant_initializer(1.0/n_side))
+        weights = tf.compat.v1.get_variable('side_weight',[n_side],tf.float32,tf.constant_initializer(1.0/n_side))
 
         for n in range(n_side):
             if n == 0:

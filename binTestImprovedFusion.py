@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import argparse
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Training Model Parameters")
     parser.add_argument(
@@ -19,13 +20,13 @@ def parse_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="DIBCO2011",
+        default="dataset",
         help="Dataset to use"
     )
     parser.add_argument(
         "--imgtype",
         type=str,
-        default="png",
+        default="bmp",
         help="Image type"
     )
     parser.add_argument(
@@ -226,7 +227,10 @@ def refinement(patch):
 
     if np.sum(res_tmp) > 0:
         #print('rescale')
-        patch = patch.resize(patch.shape, Image.Resampling.BICUBIC)
+        img_patch = Image.fromarray(patch)
+        resized_img = img_patch.resize(patch.shape[:2][::-1], resample=Image.Resampling.BICUBIC)
+        patch = np.array(resized_img)
+
     else:
         patch = (1-res_tmp)*255
 
@@ -247,9 +251,10 @@ def main():
     imgh = 256
     imgw = 256
     args = parse_args()
-    image = tf.keras.Input(dtype=tf.float32,shape=(imgh,imgw, 1),name='image')
-    imbin = tf.keras.Input(dtype=tf.float32,shape=(imgh,imgw, 1),name='imbin')
-    is_training = tf.keras.Input(dtype=tf.bool,shape=(), name='is_training')
+    tf.compat.v1.disable_eager_execution()
+    image = tf.compat.v1.placeholder(tf.float32, shape=[None, imgh, imgw, 1], name='image')
+    imbin = tf.compat.v1.placeholder(tf.float32, shape=[None, imgh, imgw, 1], name='imbin')
+    is_training = tf.compat.v1.placeholder(tf.bool, name='is_training')
 
     nlayers =0
     overlap = args.overlap
@@ -258,16 +263,16 @@ def main():
 
     bin_pred_list = net.buildnet(image,num_block,nlayers)
 
-    # model_saver = tf.train.Saver()
-    # sess = tf.Session()
-    # sess.run(tf.global_variables_initializer())
+    model_saver = tf.compat.v1.train.Saver()
+    sess = tf.compat.v1.Session()
+    sess.run(tf.compat.v1.global_variables_initializer())
 
     model_logs_dir = args.logs_dir
     print('-'*20)
     print(model_logs_dir)
     ckpt = tf.train.get_checkpoint_state(model_logs_dir)
     if ckpt and ckpt.model_checkpoint_path:
-        # model.load_weights(ckpt.model_checkpoint_path)
+        model_saver.restore(sess,ckpt.model_checkpoint_path)
         print('*'*20)
         print("Model restored...")
         print('*'*20)
@@ -296,7 +301,8 @@ def main():
 
             print('processing the image:', img)
 
-            image_test = misc.imread(image_test_dir + img,mode='L')
+            image_test = Image.open(os.path.join(image_test_dir, img)).convert("L")
+            image_test = np.array(image_test)
             oh,ow = image_test.shape
 
 
@@ -319,8 +325,6 @@ def main():
 
                     reshape = (imgw,imgh)
                     image_patch,poslist = get_image_patch(image_test,crp_h,crp_w,reshape,overlap=overlap)
-                    #image_patch += rpatch
-                    #poslist += rpos
 
                     image_patch = np.stack(image_patch)
                     image_patch = np.expand_dims(image_patch,axis=3)
