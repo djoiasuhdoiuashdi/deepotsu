@@ -389,7 +389,7 @@ def main():
                         res_out[ys:ye,xs:xe] += res_path
 
             res_out = res_out / num_hit
-            im_save('pred-' + img[:-4] + '-list-' + str(s) + '.png', res_out)
+            im_save(img[:-4] + '.tiff', res_out)
 
 
 if __name__ == '__main__':
