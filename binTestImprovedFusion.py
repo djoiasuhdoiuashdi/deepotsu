@@ -1,26 +1,52 @@
 from __future__ import print_function
 import tensorflow as tf
-import binNetworks as net
+import bin_networks as net
 import os
 import numpy as np
-from scipy import misc
 import cv2
 import matplotlib.pyplot as plt
 from PIL import Image
+import argparse
 
-imgh = 256
-imgw = 256
-
-FLAGS = tf.flags.FLAGS
-tf.flags.DEFINE_string("logs_dir", "train_model_fusion_11k-log/", "path to writer logs directory")
-tf.flags.DEFINE_string("dataset", "DIBCO2011", "path to writer logs directory")
-tf.flags.DEFINE_string("imgtype", "png", "path to writer logs directory")
-tf.flags.DEFINE_float("overlap", "0.1", "overlap of patches")
-tf.flags.DEFINE_bool("multiscale", "False", "whether use multiscale")
-tf.flags.DEFINE_integer("num_block", "6", "the number of blocks")
-
-overlap = 4.0
-
+def parse_args():
+    parser = argparse.ArgumentParser(description="Training Model Parameters")
+    parser.add_argument(
+        "--logs_dir",
+        type=str,
+        default="train_model_fusion_11k-log/",
+        help="Path to writer logs directory"
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="DIBCO2011",
+        help="Dataset to use"
+    )
+    parser.add_argument(
+        "--imgtype",
+        type=str,
+        default="png",
+        help="Image type"
+    )
+    parser.add_argument(
+        "--overlap",
+        type=float,
+        default=0.1,
+        help="Overlap of patches"
+    )
+    parser.add_argument(
+        "--multiscale",
+        type=bool,
+        default=False,
+        help="Whether to use multiscale"
+    )
+    parser.add_argument(
+        "--num_block",
+        type=int,
+        default=6,
+        help="The number of blocks"
+    )
+    return parser.parse_args()
 
 def imshow(img):
     #img = misc.toimage(img, cmin=0, cmax=255)
@@ -64,8 +90,7 @@ def get_image_patch_multiscale(image,imgh,imgw,nimgh,nimgw,overlap=0.1):
         for xs in range(0,width-nimgw,overlap_wid):
             xe = xs + nimgw
             imgpath = image[ys:ye,xs:xe]
-
-            imgpath = misc.imresize(imgpath,(imgh,imgw),interp='bicubic')
+            imgpath = imgpath.resize((nimgw, nimgh), Image.Resampling.BICUBIC)
             image_list.append(imgpath)
             pos = np.array([ys,xs])
             posit_list.append(pos)
@@ -77,7 +102,7 @@ def get_image_patch_multiscale(image,imgh,imgw,nimgh,nimgw,overlap=0.1):
         ys = ye - nimgh
         imgpath = image[ys:ye,xs:xe]
 
-        imgpath = misc.imresize(imgpath,(imgh,imgw),interp='bicubic')
+        imgpath = imgpath.resize((nimgw, nimgh), Image.Resampling.BICUBIC)
         image_list.append(imgpath)
         pos = np.array([ys,xs])
         posit_list.append(pos)
@@ -89,7 +114,7 @@ def get_image_patch_multiscale(image,imgh,imgw,nimgh,nimgw,overlap=0.1):
         xs = xe - nimgh
         imgpath = image[ys:ye,xs:xe]
 
-        imgpath = misc.imresize(imgpath,(imgh,imgw),interp='bicubic')
+        imgpath = imgpath.resize((nimgw, nimgh), Image.Resampling.BICUBIC)
         image_list.append(imgpath)
         pos = np.array([ys,xs])
         posit_list.append(pos)
@@ -101,7 +126,7 @@ def get_image_patch_multiscale(image,imgh,imgw,nimgh,nimgw,overlap=0.1):
     xs = xe - nimgw
     imgpath = image[ys:ye,xs:xe]
 
-    imgpath = misc.imresize(imgpath,(imgh,imgw),interp='bicubic')
+    imgpath = imgpath.resize((nimgw, nimgh), Image.Resampling.BICUBIC)
     image_list.append(imgpath)
     pos = np.array([ys,xs])
     posit_list.append(pos)
@@ -201,7 +226,7 @@ def refinement(patch):
 
     if np.sum(res_tmp) > 0:
         #print('rescale')
-        patch = misc.imresize(patch,patch.shape,interp='bicubic')
+        patch = patch.resize(patch.shape, Image.Resampling.BICUBIC)
     else:
         patch = (1-res_tmp)*255
 
@@ -218,47 +243,45 @@ def local_thres(patch):
     #mask = mask * 255
     return mask
 
-def main(argv=None):
+def main():
+    imgh = 256
+    imgw = 256
+    args = parse_args()
+    image = tf.keras.Input(dtype=tf.float32,shape=(imgh,imgw, 1),name='image')
+    imbin = tf.keras.Input(dtype=tf.float32,shape=(imgh,imgw, 1),name='imbin')
+    is_training = tf.keras.Input(dtype=tf.bool,shape=(), name='is_training')
 
-    image = tf.placeholder(tf.float32,shape=[None,imgh,imgw,1],name='image')
-    imbin = tf.placeholder(tf.float32,shape=[None,imgh,imgw,1],name='imbin')
-    is_training = tf.placeholder(tf.bool,name='is_training')
-
-    num_block = 6
     nlayers =0
-        overlap = FLAGS.overlap
-        multiscale = FLAGS.multiscale
-        num_block = FLAGS.num_block
+    overlap = args.overlap
+    multiscale = args.multiscale
+    num_block = args.num_block
 
     bin_pred_list = net.buildnet(image,num_block,nlayers)
 
+    # model_saver = tf.train.Saver()
+    # sess = tf.Session()
+    # sess.run(tf.global_variables_initializer())
 
-    model_saver = tf.train.Saver()
-
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-
-
-    model_logs_dir = FLAGS.logs_dir
+    model_logs_dir = args.logs_dir
     print('-'*20)
     print(model_logs_dir)
     ckpt = tf.train.get_checkpoint_state(model_logs_dir)
     if ckpt and ckpt.model_checkpoint_path:
-        model_saver.restore(sess,ckpt.model_checkpoint_path)
+        # model.load_weights(ckpt.model_checkpoint_path)
         print('*'*20)
         print("Model restored...")
         print('*'*20)
 
     #image_test_dir = '/mantis/PaperWork/binary/dataset/test/'+FLAGS.dataset+'/'
-        image_test_dir = FLAGS.dataset
+    image_test_dir = args.dataset
 
 
-    imagetype = FLAGS.imgtype
+    imagetype = args.imgtype
 
-        if multiscale:
-            scalelist = [0.75,1.0,1.25,1.5]
-        else:
-            scalelist = [1.0]
+    if multiscale:
+        scalelist = [0.75,1.0,1.25,1.5]
+    else:
+        scalelist = [1.0]
 
     for root,sub,images in os.walk(image_test_dir):
         for img in images:
@@ -280,7 +303,7 @@ def main(argv=None):
             res_out = np.zeros((oh,ow))
             num_hit = np.zeros((oh,ow))
 
-            for s in xrange(num_block):
+            for s in range(num_block):
 
                 #if s <2:
                 #	continue
@@ -291,11 +314,11 @@ def main(argv=None):
 
                 for scale in scalelist:
 
-                    crpW = int(scale*imgw)
-                    crpH = int(scale*imgh)
+                    crp_w = int(scale*imgw)
+                    crp_h = int(scale*imgh)
 
                     reshape = (imgw,imgh)
-                    image_patch,poslist = get_image_patch(image_test,crpH,crpW,reshape,overlap=overlap)
+                    image_patch,poslist = get_image_patch(image_test,crp_h,crp_w,reshape,overlap=overlap)
                     #image_patch += rpatch
                     #poslist += rpos
 
@@ -309,8 +332,9 @@ def main(argv=None):
                     batch_size = 10
 
                     nstep = int( npath / batch_size ) + 1
+                    pred_bin_list = None
 
-                    for ns in xrange(nstep):
+                    for ns in range(nstep):
                         ps = ns * batch_size
                         pe = ps + batch_size
                         if pe >= npath:
@@ -338,31 +362,31 @@ def main(argv=None):
                             pred_bin_list = np.concatenate((pred_bin_list,pred_bin),axis=0)
 
                     print(pred_bin_list.shape,npath,nstep,'*'*20)
-                    for n in xrange(npath):
+                    for n in range(npath):
                         ys = poslist[n][0]
                         xs = poslist[n][1]
                         ye = poslist[n][2]
                         xe = poslist[n][3]
 
-                        reH = ye - ys
-                        reW = xe - xs
+                        re_h = ye - ys
+                        re_w = xe - xs
 
 
                         if npath == 1:
-                            resPath = pred_bin_list
+                            res_path = pred_bin_list
                         else:
-                            resPath = pred_bin_list[n]
+                            res_path = pred_bin_list[n]
 
-                        resPath = refinement(resPath)
+                        res_path = refinement(res_path)
 
-                        resPath = cv2.resize(resPath.astype('float'), dsize=(reW,reH))
+                        res_path = cv2.resize(res_path.astype('float'), dsize=(re_w,re_h))
 
                         num_hit[ys:ye,xs:xe] += 1
-                        res_out[ys:ye,xs:xe] += resPath
+                        res_out[ys:ye,xs:xe] += res_path
 
             res_out = res_out / num_hit
             im_save('pred-' + img[:-4] + '-list-' + str(s) + '.png', res_out)
 
 
 if __name__ == '__main__':
-    tf.app.run(main=main)
+    main()
