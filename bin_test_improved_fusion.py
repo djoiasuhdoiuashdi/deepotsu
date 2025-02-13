@@ -4,7 +4,6 @@ import bin_networks as net
 import os
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
 from PIL import Image
 import argparse
 
@@ -48,24 +47,6 @@ def parse_args():
         help="The number of blocks"
     )
     return parser.parse_args()
-
-def imshow(img):
-    #img = misc.toimage(img, cmin=0, cmax=255)
-    plt.imshow(img,cmap='gray')
-    #print 'get max value in image is:',np.max(img)
-    plt.show()
-
-
-def im_show_list(imglist):
-    #img = misc.toimage(img, cmin=0, cmax=255)
-    n_img = len(imglist)
-    fig = plt.figure()
-    for n in range(n_img):
-        fig.add_subplot(1,n_img,n)
-        plt.imshow(imglist[n],cmap='gray')
-
-    #print 'get max value in image is:',np.max(img)
-    plt.show()
 
 def im_save(name, arr):
     """Save an array to an image file.
@@ -296,15 +277,11 @@ def main():
             if img.startswith('GT'):
                 continue
 
-            #if not img.startswith('PR06'):
-            #	continue
-
             print('processing the image:', img)
 
             image_test = Image.open(os.path.join(image_test_dir, img)).convert("L")
             image_test = np.array(image_test)
             oh,ow = image_test.shape
-
 
             res_out = np.zeros((oh,ow))
             num_hit = np.zeros((oh,ow))
